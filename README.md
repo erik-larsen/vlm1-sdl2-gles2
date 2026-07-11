@@ -25,14 +25,18 @@ fixed-point math.
 - [x] Parameter animation engine: 8-oscillator bank, wave-link
       modulation matrix (`omega.gas` BigLoop64), ADSR envelopes
       (`doadsr`), spectrum band envelopes + beat triggers (`psi.gas`)
-- [ ] Effect drawing modules (alpha, beta/DVF, gamma, delta, epsilon,
-      theta, shu, dbeast delay lines) — in progress
-- [ ] Audio input (SDL capture → FFT → the DSP magnitude format)
-- [ ] Object-processor composition, text overlay/editor UI, splash
+- [x] All preset-used effect modules: alpha (starfield/trail/ring),
+      beta (DVF feedback), gamma (Gouraud polygons), delta (plasma),
+      epsilon+theta (particles), shu (spectrum dots), and the dbeast
+      delay-line ghost system (sigma/tau are unused by presets)
+- [ ] delta submodes 0/3 (logo bitmaps; OP object recolour)
+- [ ] Audio input (SDL capture → FFT → the DSP magnitude format);
+      currently driven by a synthetic test spectrum
+- [ ] Object-processor composition (visible window/scale), text
+      overlay/editor UI, splash
 
-Currently the binary shows a diagnostic scope of the running animation
-engine (spectrum, oscillators, envelopes, modulation results) fed by a
-synthetic test signal.
+All 9 banks render their preset effects; `V` toggles a diagnostic
+scope of the animation engine.
 
 ## Building
 
