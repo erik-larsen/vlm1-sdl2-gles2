@@ -66,7 +66,18 @@ void vlm_engine_select(VlmEngine *e, int bank, int effect)
         e->fx[s] = vlm_be32(obj + FX_INFO) ? obj : NULL;
     }
     memcpy(e->pixcon, base + 896, sizeof e->pixcon);
-    /* (zapdel: delay-line rings reset — delay lines not yet ported) */
+
+    /* zapdel (vlm.s:1261, called from skidoo AFTER the pixcon copy —
+     * the preset's saved delay words are clobbered on every load):
+     * fixed delay config, rings invalidated. */
+    e->delay[0].sel = 2;
+    e->delay[1].sel = 3;
+    for (int ch = 0; ch < 2; ch++) {
+        e->delay[ch].p = 0;
+        e->delay[ch].t = 2;
+        e->delay[ch].n = 15;
+    }
+    memset(e->delaylin, 0, sizeof e->delaylin);
 }
 
 /* ---- ADSR (doadsr, vlm.s:906-1023) ---------------------------------- */
@@ -279,7 +290,7 @@ static void run_modulation(VlmEngine *e, uint8_t *fx)
  * 6 theta, 7 sigma, 8 tau, 9 shu, 10 dbeast). Unported modules are
  * no-ops for now. */
 static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
-                       const uint16_t *cscreen)
+                       const uint16_t *cscreen, int echo_run)
 {
     uint32_t gpu = vlm_be32(fx + FX_GPU);
     VlmFxCtx c = {
@@ -287,7 +298,7 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
         .cscreen = cscreen,
         .fx = fx,
         .submode = gpu & 0xFFFF,
-        .echo_run = 0,
+        .echo_run = echo_run,
         .skale = e->skale,
         .absdelta = e->absdelta,
         .pools = e->pools,
@@ -325,16 +336,37 @@ void vlm_engine_frame(VlmEngine *e, uint16_t *screen,
     do_adsr(e, PC_ADSRB, (e->buttons & PAD_B) != 0, 6);
     do_adsr(e, PC_ADSRA, (e->buttons & PAD_A) != 0, 7);
 
-    /* GPU omega, per fxobj: live module run with trig stored into
+    /* GPU omega, per fxobj: dbeast (delay-line snapshot + echo
+     * replays of archived parameter blocks, dbeast.gas +
+     * omega.gas:199-259), the live module run with trig stored into
      * `height` first (omega.gas:264-293), then the oscillator +
-     * modulation pass. Delay-line echo runs (dbeast) not yet ported. */
+     * modulation pass on the live object only. */
     for (int s = 0; s < VLM_SUBFX; s++) {
         uint8_t *fx = e->fx[s];
         if (!fx)
             continue;
+        if (screen) {
+            for (int ch = 0; ch < 2; ch++) {
+                if (e->delay[ch].sel != s)
+                    continue;
+                uint8_t *ring = e->delaylin + ch * 0x300;
+                /* snapshot the first $300 bytes into slot p&63 */
+                memcpy(ring + (e->delay[ch].p & 63) * 0x600, fx, 0x300);
+                /* replay n ghosts at t-frame spacing */
+                int32_t idx = (int32_t)(e->delay[ch].p & 63)
+                              - e->delay[ch].t * e->delay[ch].n;
+                for (int i = 0; i < e->delay[ch].n; i++) {
+                    uint8_t *rec = ring + (idx & 63) * 0x600;
+                    if (vlm_be32(rec + FX_INFO))
+                        run_module(e, rec, screen, cscreen, 1);
+                    idx += e->delay[ch].t;
+                }
+                e->delay[ch].p++;
+            }
+        }
         vlm_wbe32(fx + FX_HEIGHT, e->trig);
         if (screen)
-            run_module(e, fx, screen, cscreen);
+            run_module(e, fx, screen, cscreen, 0);
         run_oscillators(e, fx);
         run_modulation(e, fx);
     }

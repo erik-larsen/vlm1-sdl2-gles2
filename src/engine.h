@@ -55,6 +55,18 @@ typedef struct {
     /* Particle pools (pobjs[2]) for theta/epsilon */
     VlmParticlePool pools[2];
 
+    /* Delay-line (echo) channels + ring arena (dbeast; delaylin at
+     * $1C03F8: 2 interleaved rings of 64 x 768-byte snapshots,
+     * stride $600). zapdel (vlm.s:1261) runs at every effect select
+     * and fixes the config: ch0 echoes slot 2, ch1 slot 3, step 2,
+     * 15 ghosts. */
+    struct {
+        uint16_t sel;   /* delayf / zerstart: which fxobj slot echoes */
+        uint16_t p;     /* delayp: write index */
+        uint16_t t, n;  /* delayt step frames, delayn ghost count */
+    } delay[2];
+    uint8_t delaylin[128 * 768];
+
     uint32_t buttons;      /* PAD_* bitmask for ADSR triggers */
 } VlmEngine;
 
