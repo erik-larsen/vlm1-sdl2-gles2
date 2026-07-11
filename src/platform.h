@@ -23,6 +23,7 @@ enum {
     PAD_STAR   = 1 << 9,   /* '*' */
     PAD_HASH   = 1 << 10,  /* '#' */
     PAD_0      = 1 << 11,  /* keypad digits 0-9: bits 11..20 */
+    PAD_SCOPE  = 1 << 21,  /* debug: V toggles the engine scope */
 };
 #define PAD_DIGIT(n) (PAD_0 << (n))
 

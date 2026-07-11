@@ -195,8 +195,11 @@ static void handle_key(SDL_Keycode key, bool down)
     case SDLK_c:        bit = PAD_C; break;
     case SDLK_o:        bit = PAD_OPTION; break;
     case SDLK_p:        bit = PAD_PAUSE; break;
-    case SDLK_8:        bit = PAD_STAR; break;   /* shift-8 aside, plain 8 too */
-    case SDLK_3:        bit = PAD_HASH; break;
+    case SDLK_v:        bit = PAD_SCOPE; break;
+    case SDLK_m:
+    case SDLK_KP_MULTIPLY: bit = PAD_STAR; break;
+    case SDLK_h:
+    case SDLK_KP_DIVIDE:   bit = PAD_HASH; break;
     default: break;
     }
     if (key >= SDLK_0 && key <= SDLK_9)

@@ -2,6 +2,7 @@
 #include "waves.h"
 #include "platform.h" /* PAD_* for ADSR buttons */
 #include "pbinfo_data.h"
+#include "fx.h"
 
 #include <string.h>
 
@@ -273,21 +274,46 @@ static void run_modulation(VlmEngine *e, uint8_t *fx)
     }
 }
 
-void vlm_engine_frame(VlmEngine *e)
+/* Dispatch a drawing module by the fxobj gpu field (gpumods order,
+ * vlmgpu.s:113: 0 alpha, 1 beta, 2 gamma, 3 psi, 4 delta, 5 epsilon,
+ * 6 theta, 7 sigma, 8 tau, 9 shu, 10 dbeast). Unported modules are
+ * no-ops for now. */
+static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen)
+{
+    (void)e;
+    uint32_t gpu = vlm_be32(fx + FX_GPU);
+    VlmFxCtx c = {
+        .screen = screen,
+        .fx = fx,
+        .submode = gpu & 0xFFFF,
+        .echo_run = 0,
+    };
+    switch (gpu >> 16) {
+    case 0:
+        vlm_fx_alpha(&c);
+        break;
+    default:
+        break;
+    }
+}
+
+void vlm_engine_frame(VlmEngine *e, uint16_t *screen)
 {
     /* 68k VI side: ADSR envelopes -> envvals[5..7]. */
     do_adsr(e, PC_ADSRC, (e->buttons & PAD_C) != 0, 5);
     do_adsr(e, PC_ADSRB, (e->buttons & PAD_B) != 0, 6);
     do_adsr(e, PC_ADSRA, (e->buttons & PAD_A) != 0, 7);
 
-    /* GPU omega: per fxobj, drawing module (not yet ported) then
-     * oscillator + modulation pass; trig lands in `height` first
-     * (omega.gas:264-293). */
+    /* GPU omega, per fxobj: live module run with trig stored into
+     * `height` first (omega.gas:264-293), then the oscillator +
+     * modulation pass. Delay-line echo runs (dbeast) not yet ported. */
     for (int s = 0; s < VLM_SUBFX; s++) {
         uint8_t *fx = e->fx[s];
         if (!fx)
             continue;
         vlm_wbe32(fx + FX_HEIGHT, e->trig);
+        if (screen)
+            run_module(e, fx, screen);
         run_oscillators(e, fx);
         run_modulation(e, fx);
     }

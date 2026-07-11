@@ -60,7 +60,9 @@ void vlm_engine_select(VlmEngine *e, int bank, int effect);
  * at $F1B034); pass NULL for silence. */
 void vlm_engine_spectrum(VlmEngine *e, const uint32_t *fft67);
 
-/* Run one 60Hz frame of parameter animation (no drawing yet). */
-void vlm_engine_frame(VlmEngine *e);
+/* Run one 60Hz frame: per fxobj, the drawing module renders into
+ * `screen` (384x384 CRY16, may be NULL to skip drawing), then the
+ * oscillator + modulation pass animates parameters. */
+void vlm_engine_frame(VlmEngine *e, uint16_t *screen);
 
 #endif

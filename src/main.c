@@ -1,28 +1,30 @@
 /*
  * VLM-1 SDL2/GLES2 port — entry point.
  *
- * Drawing modules are not ported yet, so this currently runs the full
- * parameter-animation engine (bank/effect load, oscillators, wave-link
- * modulation, ADSR + band envelopes) on a synthetic test spectrum and
- * renders a diagnostic scope into the CRY framebuffer:
- *   top:    64-band absdelta spectrum (peak-hold)
- *   middle: 8 oscillator outputs + 8 envelope values as bars
- *   bottom: the 64 modulation results as a strip chart
- * Keys: 1-9 select effect within bank, * (8) + digit selects bank,
- * A/B/C = Z/X/C trigger the ADSR envelopes.
+ * Runs the parameter-animation engine over the real preset banks with
+ * a synthetic test spectrum, rendering ported drawing modules (alpha
+ * so far) into double-buffered 384x384 CRY screens, exactly like the
+ * original's dscreen/cscreen pair. Unported modules (notably beta,
+ * the DVF feedback that fades/zooms the previous frame) are no-ops,
+ * so plots currently accumulate — expected until beta lands.
+ *
+ * Keys: 1-9 effect, 8(*)+digit bank, Z/X/C = A/B/C buttons (ADSR),
+ * V toggles the engine diagnostic scope, Esc quits.
  */
 #include "platform.h"
 #include "engine.h"
+#include "fx.h"
 
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
+#include <string.h>
 
-#define FB_W 384
-#define FB_H 240
-
-static uint16_t fb[FB_W * FB_H];
+static uint16_t screens[2][VLM_SCREEN_W * VLM_SCREEN_H];
+static int draw_idx;
 static VlmEngine engine;
+static bool show_scope;
+static uint16_t scope_fb[VLM_SCREEN_W * VLM_SCREEN_H];
 
 /* Synthetic FFT: a slow bass thump + two wandering mid/high peaks, so
  * the psi band envelopes and triggers have something to chew on. */
@@ -38,56 +40,44 @@ static void test_spectrum(uint32_t t, uint32_t out[67])
     out[mid] = 0x7000;
     out[mid + 1] = 0x5000;
     out[high] = 0x6000;
-    return;
 }
 
-static void bar(int x, int y0, int h_up, uint16_t color)
+static void bar(uint16_t *fb, int x, int y0, int h_up, uint16_t color)
 {
-    if (x < 0 || x >= FB_W)
+    if (x < 0 || x >= VLM_SCREEN_W)
         return;
     for (int y = y0; y > y0 - h_up && y >= 0; y--)
-        if (y < FB_H)
-            fb[y * FB_W + x] = color;
+        if (y < VLM_SCREEN_H)
+            fb[y * VLM_SCREEN_W + x] = color;
 }
 
-static void draw_scope(uint32_t t)
+static void draw_scope(void)
 {
-    for (int i = 0; i < FB_W * FB_H; i++)
-        fb[i] = 0;
-
-    /* absdelta spectrum, 64 bands x 5px wide */
+    memset(scope_fb, 0, sizeof scope_fb);
     for (int b = 0; b < 64; b++) {
-        int h = (int)(engine.absdelta[b] >> 10);
-        if (h > 70)
-            h = 70;
+        int h = (int)(engine.absdelta[b] >> 9);
+        if (h > 120)
+            h = 120;
         uint16_t c = (uint16_t)(((b * 4) << 8) | 0xE0);
         for (int k = 0; k < 5; k++)
-            bar(b * 6 + k + 2, 78, h, c);
+            bar(scope_fb, b * 6 + k + 2, 130, h, c);
     }
-
-    /* oscillator outputs (green-ish) and envelopes (red-ish) */
     for (int k = 0; k < 8; k++) {
-        int ho = engine.oscvals[k] >> 10;   /* 0..64 */
-        int he = engine.envvals[k] >> 10;
         for (int w = 0; w < 12; w++) {
-            bar(20 + k * 20 + w, 158, ho, 0x18F0);
-            bar(210 + k * 20 + w, 158, he, 0xC8F0);
+            bar(scope_fb, 20 + k * 20 + w, 250, engine.oscvals[k] >> 9,
+                0x18F0);
+            bar(scope_fb, 210 + k * 20 + w, 250, engine.envvals[k] >> 9,
+                0xC8F0);
         }
     }
-
-    /* modulation results strip */
-    for (int i = 0; i < 64; i++) {
-        int h = engine.results[i] >> 11;    /* 0..32 */
+    for (int i = 0; i < 64; i++)
         for (int k = 0; k < 4; k++)
-            bar(i * 6 + k + 2, 232, h + 1, 0x00FF);
-    }
-
-    /* trigger lamps */
+            bar(scope_fb, i * 6 + k + 2, 370, (engine.results[i] >> 10) + 1,
+                0x00FF);
     for (int b = 0; b < 5; b++) {
         uint16_t c = (engine.trig & (1 << b)) ? 0x38FF : 0x3830;
         for (int w = 0; w < 8; w++)
-            bar(340 + b * 9 - 170, 170, 6, c);
-        (void)t;
+            bar(scope_fb, 170 + b * 12 + w, 262, 6, c);
     }
 }
 
@@ -95,6 +85,7 @@ static bool tick(void)
 {
     static uint32_t frame = 0;
     static uint32_t held_digits = 0;
+    static bool held_v = false;
 
     if (!plat_poll())
         return false;
@@ -114,13 +105,22 @@ static bool tick(void)
     }
     held_digits = buttons & (0x3FF * PAD_0);
 
+    if ((buttons & PAD_SCOPE) && !held_v)
+        show_scope = !show_scope;
+    held_v = (buttons & PAD_SCOPE) != 0;
+
     uint32_t fft[67];
     test_spectrum(frame, fft);
     vlm_engine_spectrum(&engine, fft);
-    vlm_engine_frame(&engine);
+    vlm_engine_frame(&engine, screens[draw_idx]);
 
-    draw_scope(frame);
-    plat_present_cry(fb);
+    if (show_scope) {
+        draw_scope();
+        plat_present_cry(scope_fb);
+    } else {
+        plat_present_cry(screens[draw_idx]);
+    }
+    draw_idx ^= 1; /* swap dscreen/cscreen */
     frame++;
     return true;
 }
@@ -130,8 +130,8 @@ int main(int argc, char **argv)
     plat_bootstrap(argc, argv);
 
     PlatformConfig cfg = {
-        .fb_width = FB_W,
-        .fb_height = FB_H,
+        .fb_width = VLM_SCREEN_W,
+        .fb_height = VLM_SCREEN_H,
         .title = "VLM-1 (SDL2/GLES2)",
         .window_scale = 2,
     };
