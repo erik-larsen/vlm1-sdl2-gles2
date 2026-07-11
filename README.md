@@ -1,0 +1,79 @@
+# VLM-1 — SDL2/GLES2 port
+
+A from-source C port of Jeff Minter's **Virtual Light Machine** (the
+light synthesizer built into the Atari Jaguar CD, 1995), targeting one
+shared code path for native (macOS via ANGLE, Linux, Windows) and the
+browser (Emscripten/WebGL).
+
+The port is built against the reverse-engineered original source in
+[mwenge/vlm](https://github.com/mwenge/vlm) (the "llamasource"
+project), which reconstructs the 68000 + Jaguar GPU assembly with the
+original symbol names. The goal is full fidelity: the engine operates
+on the original big-endian fx-object images, the original preset data
+(byte-identical to the shipped `vlm.abs`), and reproduces the original
+fixed-point math.
+
+## Status
+
+- [x] Cross-platform build (Mac native + Emscripten), makefiles adapted
+      from [sgi-demos](https://github.com/mipmap/sgi-demos)
+- [x] SDL2/GLES2 platform layer: CRY16 framebuffer presented via a
+      textured quad, CRY→RGB using the Jaguar TOM hardware chroma tables
+- [x] Bank data pipeline: all 10 preset banks extracted from `banks.s`
+      (byte-identical to original binary), `ifxobj`/`gm` decompressor
+      ported and validated against reference dumps
+- [x] Parameter animation engine: 8-oscillator bank, wave-link
+      modulation matrix (`omega.gas` BigLoop64), ADSR envelopes
+      (`doadsr`), spectrum band envelopes + beat triggers (`psi.gas`)
+- [ ] Effect drawing modules (alpha, beta/DVF, gamma, delta, epsilon,
+      theta, shu, dbeast delay lines) — in progress
+- [ ] Audio input (SDL capture → FFT → the DSP magnitude format)
+- [ ] Object-processor composition, text overlay/editor UI, splash
+
+Currently the binary shows a diagnostic scope of the running animation
+engine (spectrum, oscillators, envelopes, modulation results) fed by a
+synthetic test signal.
+
+## Building
+
+Prereqs: SDL2 (`brew install sdl2`), Emscripten for the browser
+target, Python 3 for the data extractors, and a checkout of
+[mwenge/vlm](https://github.com/mwenge/vlm) at `../vlm-ref` (only
+needed to regenerate `src/*_data.c`).
+
+```sh
+make native    # -> bin-<os>-<arch>/vlm
+make browser   # -> web/vlm.html (needs emcc on PATH)
+make           # both
+```
+
+Run: `make run-native`, or serve `web/` and open `vlm.html`.
+
+Controls (matching the Jaguar pad mapping): keypad/number keys select
+the effect, `8`(*) + digit selects a bank, `Z`/`X`/`C` are the A/B/C
+buttons (trigger the ADSR envelopes), `O` option, `P` pause, arrows =
+d-pad, Esc quits.
+
+## Layout
+
+- `src/` — the port. `engine.c` (animation core), `banks.c` (preset
+  decompressor), `waves.c` (oscillator tables), `cry.c` (CRY→RGB),
+  `platform.c` (SDL2/GLES2 glue), `*_data.*` (generated).
+- `scripts/` — data extractors + validators (`extract_banks.py`,
+  `extract_waves.py`, `validate_banks.py`).
+- `docs/` — porting specs reverse-engineered from the original source:
+  [68k engine](docs/analysis-68k-engine.md),
+  [GPU effect modules](docs/analysis-gpu-effects.md),
+  [bank data format](docs/analysis-banks-data.md).
+- `libs/libgles/` — ANGLE dylibs (vendored from sgi-demos) so the
+  native build uses real GLES2 on macOS.
+
+## License / provenance
+
+The original VLM is © Jeff Minter / Llamasoft (published 1995 by Atari
+for the Jaguar CD); the reconstructed assembly source is preserved in
+mwenge/vlm for study. This repository contains a new C implementation
+written against that reference, plus data tables extracted from it,
+for preservation and study. CRY conversion tables are the Jaguar TOM
+hardware values as documented in the Jaguar Technical Reference and
+Virtual Jaguar (GPL).
