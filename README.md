@@ -32,9 +32,11 @@ fixed-point math.
 - [x] Live audio input: SDL capture (mic/loopback; getUserMedia in
       the browser) → 256-point FFT → the DSP's magnitude format, with
       a synthetic test-signal fallback (`A` key toggles)
+- [x] Object-processor display window: the NTSC-visible 384x240 crop
+      of the render buffer, with the per-effect `skale` zoom (1x/2x/4x)
+      that beta drives from the preset's Thang parameter
 - [ ] delta submodes 0/3 (logo bitmaps; OP object recolour)
-- [ ] Object-processor composition (visible window/scale), text
-      overlay/editor UI, splash
+- [ ] Text overlay/editor UI, pad-inertia controls, splash screen
 
 All 9 banks render their preset effects reacting to live audio; `V`
 toggles a diagnostic scope of the animation engine. First launch asks
