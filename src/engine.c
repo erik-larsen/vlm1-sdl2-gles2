@@ -48,6 +48,8 @@ void vlm_engine_init(VlmEngine *e)
     for (int b = 0; b < 5; b++)
         e->band_trigmin[b] = avbank[b][2];
     e->effect = 1;
+    e->skale = 1; /* everything() default (vlm.s:345); beta rewrites
+                     it each frame from the DVF's thang */
 }
 
 void vlm_engine_select(VlmEngine *e, int bank, int effect)
