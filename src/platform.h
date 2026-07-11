@@ -39,7 +39,14 @@ void plat_bootstrap(int argc, char **argv);
 bool plat_init(const PlatformConfig *cfg);
 void plat_shutdown(void);
 
-/* Poll input; returns false when the app should quit. */
+/* Run the main loop: calls tick() once per frame until tick returns
+ * false (or the browser tab closes). Native: a plain loop; Emscripten:
+ * emscripten_set_main_loop, so no ASYNCIFY is needed. Does not return
+ * on Emscripten. */
+void plat_run(bool (*tick)(void));
+
+/* Poll input; returns false when the app should quit. Call once per
+ * tick. */
 bool plat_poll(void);
 
 /* Currently-held pad buttons. */

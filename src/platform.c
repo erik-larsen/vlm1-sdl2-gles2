@@ -211,6 +211,29 @@ static void handle_key(SDL_Keycode key, bool down)
         P.buttons &= ~bit;
 }
 
+#ifdef __EMSCRIPTEN__
+static bool (*em_tick)(void);
+
+static void em_loop(void)
+{
+    if (!em_tick())
+        emscripten_cancel_main_loop();
+}
+#endif
+
+void plat_run(bool (*tick)(void))
+{
+#ifdef __EMSCRIPTEN__
+    em_tick = tick;
+    /* Ask the browser for 60Hz to match the Jaguar VI cadence; the
+     * native pacing in plat_present_cry() is compiled out for wasm. */
+    emscripten_set_main_loop(em_loop, 60, 1);
+#else
+    while (tick())
+        ;
+#endif
+}
+
 bool plat_poll(void)
 {
     SDL_Event e;
@@ -276,16 +299,15 @@ void plat_present_cry(const uint16_t *cry_pixels)
 
     SDL_GL_SwapWindow(P.window);
 
-    /* Pace to 60Hz independent of display refresh. SDL_Delay also yields
-     * to the browser under Emscripten/ASYNCIFY, keeping one code path. */
+#ifndef __EMSCRIPTEN__
+    /* Pace to 60Hz independent of display refresh. In the browser the
+     * emscripten_set_main_loop(..., 60, ...) callback provides the
+     * cadence instead, so no delay there. */
     P.next_frame += 50; /* 50/3 ms per frame, in ms*3 units */
     uint32_t now3 = SDL_GetTicks() * 3;
     if ((int32_t)(P.next_frame - now3) > 3)
         SDL_Delay((P.next_frame - now3) / 3);
     else if ((int32_t)(now3 - P.next_frame) > 300)
         P.next_frame = now3; /* fell behind badly: resync */
-#ifdef __EMSCRIPTEN__
-    else
-        emscripten_sleep(0); /* always yield at least once per frame */
 #endif
 }

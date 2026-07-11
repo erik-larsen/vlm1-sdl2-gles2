@@ -91,6 +91,40 @@ static void draw_scope(uint32_t t)
     }
 }
 
+static bool tick(void)
+{
+    static uint32_t frame = 0;
+    static uint32_t held_digits = 0;
+
+    if (!plat_poll())
+        return false;
+
+    uint32_t buttons = plat_buttons();
+    engine.buttons = buttons;
+
+    /* effect/bank select: plain digit = effect, with * held = bank */
+    for (int d = 1; d <= 9; d++) {
+        uint32_t bit = PAD_DIGIT(d);
+        if ((buttons & bit) && !(held_digits & bit)) {
+            if (buttons & PAD_STAR)
+                vlm_engine_select(&engine, d - 1, engine.effect);
+            else
+                vlm_engine_select(&engine, engine.bank, d);
+        }
+    }
+    held_digits = buttons & (0x3FF * PAD_0);
+
+    uint32_t fft[67];
+    test_spectrum(frame, fft);
+    vlm_engine_spectrum(&engine, fft);
+    vlm_engine_frame(&engine);
+
+    draw_scope(frame);
+    plat_present_cry(fb);
+    frame++;
+    return true;
+}
+
 int main(int argc, char **argv)
 {
     plat_bootstrap(argc, argv);
@@ -107,33 +141,7 @@ int main(int argc, char **argv)
     vlm_engine_init(&engine);
     vlm_engine_select(&engine, 0, 1);
 
-    uint32_t frame = 0;
-    uint32_t held_digits = 0;
-    while (plat_poll()) {
-        uint32_t buttons = plat_buttons();
-        engine.buttons = buttons;
-
-        /* effect/bank select: plain digit = effect, with * held = bank */
-        for (int d = 1; d <= 9; d++) {
-            uint32_t bit = PAD_DIGIT(d);
-            if ((buttons & bit) && !(held_digits & bit)) {
-                if (buttons & PAD_STAR)
-                    vlm_engine_select(&engine, d - 1, engine.effect);
-                else
-                    vlm_engine_select(&engine, engine.bank, d);
-            }
-        }
-        held_digits = buttons & (0x3FF * PAD_0);
-
-        uint32_t fft[67];
-        test_spectrum(frame, fft);
-        vlm_engine_spectrum(&engine, fft);
-        vlm_engine_frame(&engine);
-
-        draw_scope(frame);
-        plat_present_cry(fb);
-        frame++;
-    }
+    plat_run(tick);
 
     plat_shutdown();
     return 0;

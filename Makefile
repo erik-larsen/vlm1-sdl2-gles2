@@ -39,9 +39,12 @@ $(APP): $(OBJS)
 $(EM_OBJS): $(WEB_DIR)/%.o: $(SRC_DIR)/%.c $(HDRS) | $(WEB_DIR)
 	$(CODE_EMCC) $(EM_OPT) $(EM_SDL_LIBS) $< -c -o $@
 
+# No ASYNCIFY: the platform layer uses emscripten_set_main_loop
+# (callback-style), so the wasm stays small and each frame is a plain
+# call from the browser scheduler.
 $(EM_APP): $(EM_OBJS)
 	$(CODE_EMCC) $(EM_OPT) $(EM_OBJS) \
-		$(EM_SDL_LIBS) $(EM_ASYNCIFY) -lm -o $@
+		$(EM_SDL_LIBS) -lm -o $@
 	@echo
 	@echo BUILT: $@
 
