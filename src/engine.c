@@ -278,26 +278,33 @@ static void run_modulation(VlmEngine *e, uint8_t *fx)
  * vlmgpu.s:113: 0 alpha, 1 beta, 2 gamma, 3 psi, 4 delta, 5 epsilon,
  * 6 theta, 7 sigma, 8 tau, 9 shu, 10 dbeast). Unported modules are
  * no-ops for now. */
-static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen)
+static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
+                       const uint16_t *cscreen)
 {
-    (void)e;
     uint32_t gpu = vlm_be32(fx + FX_GPU);
     VlmFxCtx c = {
         .screen = screen,
+        .cscreen = cscreen,
         .fx = fx,
         .submode = gpu & 0xFFFF,
         .echo_run = 0,
+        .skale = e->skale,
     };
     switch (gpu >> 16) {
     case 0:
         vlm_fx_alpha(&c);
         break;
+    case 1:
+        vlm_fx_beta(&c);
+        break;
     default:
         break;
     }
+    e->skale = c.skale;
 }
 
-void vlm_engine_frame(VlmEngine *e, uint16_t *screen)
+void vlm_engine_frame(VlmEngine *e, uint16_t *screen,
+                      const uint16_t *cscreen)
 {
     /* 68k VI side: ADSR envelopes -> envvals[5..7]. */
     do_adsr(e, PC_ADSRC, (e->buttons & PAD_C) != 0, 5);
@@ -313,7 +320,7 @@ void vlm_engine_frame(VlmEngine *e, uint16_t *screen)
             continue;
         vlm_wbe32(fx + FX_HEIGHT, e->trig);
         if (screen)
-            run_module(e, fx, screen);
+            run_module(e, fx, screen, cscreen);
         run_oscillators(e, fx);
         run_modulation(e, fx);
     }

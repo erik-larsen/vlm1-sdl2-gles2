@@ -18,9 +18,11 @@
 
 typedef struct {
     uint16_t *screen;     /* draw buffer (r23 / dscreen) */
+    const uint16_t *cscreen; /* previous completed frame (feedback src) */
     uint8_t *fx;          /* fxobj big-endian byte image (r3) */
     uint32_t submode;     /* low word of the gpu field ($F03F5C) */
     int echo_run;         /* draw_screen+4 bit0: 1 = delay-line echo run */
+    uint16_t skale;       /* OP display-scale word written by beta */
 
     /* Module-register state used by the shared plot path */
     uint32_t cc_pix;      /* r5: CC << 8 */
@@ -84,5 +86,6 @@ static inline int32_t vlm_fx_fmult(int32_t a, int32_t b)
 
 /* Modules */
 void vlm_fx_alpha(VlmFxCtx *c);
+void vlm_fx_beta(VlmFxCtx *c);
 
 #endif

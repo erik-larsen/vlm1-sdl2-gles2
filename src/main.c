@@ -112,7 +112,7 @@ static bool tick(void)
     uint32_t fft[67];
     test_spectrum(frame, fft);
     vlm_engine_spectrum(&engine, fft);
-    vlm_engine_frame(&engine, screens[draw_idx]);
+    vlm_engine_frame(&engine, screens[draw_idx], screens[draw_idx ^ 1]);
 
     if (show_scope) {
         draw_scope();

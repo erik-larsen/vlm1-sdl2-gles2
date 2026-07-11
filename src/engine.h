@@ -48,6 +48,9 @@ typedef struct {
     /* User controls (px/py pseudo-waveforms; symadj inertia later) */
     uint16_t px, py;
 
+    /* OP display scale word, written by beta from `thang` */
+    uint16_t skale;
+
     uint32_t buttons;      /* PAD_* bitmask for ADSR triggers */
 } VlmEngine;
 
@@ -61,8 +64,10 @@ void vlm_engine_select(VlmEngine *e, int bank, int effect);
 void vlm_engine_spectrum(VlmEngine *e, const uint32_t *fft67);
 
 /* Run one 60Hz frame: per fxobj, the drawing module renders into
- * `screen` (384x384 CRY16, may be NULL to skip drawing), then the
- * oscillator + modulation pass animates parameters. */
-void vlm_engine_frame(VlmEngine *e, uint16_t *screen);
+ * `screen` (384x384 CRY16, may be NULL to skip drawing) with
+ * `cscreen` as the previous completed frame (feedback source), then
+ * the oscillator + modulation pass animates parameters. */
+void vlm_engine_frame(VlmEngine *e, uint16_t *screen,
+                      const uint16_t *cscreen);
 
 #endif
