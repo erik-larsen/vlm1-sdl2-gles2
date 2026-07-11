@@ -24,6 +24,7 @@ enum {
     PAD_HASH   = 1 << 10,  /* '#' */
     PAD_0      = 1 << 11,  /* keypad digits 0-9: bits 11..20 */
     PAD_SCOPE  = 1 << 21,  /* debug: V toggles the engine scope */
+    PAD_AUDIO  = 1 << 22,  /* A toggles live audio vs test signal */
 };
 #define PAD_DIGIT(n) (PAD_0 << (n))
 
@@ -59,5 +60,15 @@ void plat_present_cry(const uint16_t *cry_pixels);
 
 /* Milliseconds since init. */
 uint32_t plat_ticks(void);
+
+/* Open the default audio capture device (mic / loopback). Returns
+ * false if unavailable; the app then falls back to a test signal.
+ * Under Emscripten this triggers the browser's mic permission. */
+bool plat_audio_start(void);
+
+/* Copy the most recent n mono samples (-1..1) into buf; zeros until
+ * enough audio has arrived. Returns false if capture is not running
+ * or no samples have been delivered yet. */
+bool plat_audio_latest(float *buf, int n);
 
 #endif

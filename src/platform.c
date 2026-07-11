@@ -196,6 +196,7 @@ static void handle_key(SDL_Keycode key, bool down)
     case SDLK_o:        bit = PAD_OPTION; break;
     case SDLK_p:        bit = PAD_PAUSE; break;
     case SDLK_v:        bit = PAD_SCOPE; break;
+    case SDLK_a:        bit = PAD_AUDIO; break;
     case SDLK_m:
     case SDLK_KP_MULTIPLY: bit = PAD_STAR; break;
     case SDLK_h:
@@ -267,6 +268,69 @@ uint32_t plat_buttons(void)
 uint32_t plat_ticks(void)
 {
     return SDL_GetTicks() - P.t0;
+}
+
+/* ---- audio capture --------------------------------------------------- */
+
+#define AUD_RING 8192 /* power of two, ~185ms at 44.1kHz */
+
+static struct {
+    SDL_AudioDeviceID dev;
+    float ring[AUD_RING];
+    uint32_t wpos;      /* total samples written (mod 2^32) */
+} A;
+
+static void audio_cb(void *userdata, Uint8 *stream, int len)
+{
+    (void)userdata;
+    const float *in = (const float *)stream;
+    int n = len / (int)sizeof(float);
+    for (int i = 0; i < n; i++)
+        A.ring[(A.wpos + (uint32_t)i) & (AUD_RING - 1)] = in[i];
+    A.wpos += (uint32_t)n;
+}
+
+bool plat_audio_start(void)
+{
+    if (A.dev)
+        return true;
+    if (!SDL_WasInit(SDL_INIT_AUDIO) && SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+        fprintf(stderr, "audio init: %s\n", SDL_GetError());
+        return false;
+    }
+    SDL_AudioSpec want, have;
+    SDL_zero(want);
+    want.freq = 44100;
+    want.format = AUDIO_F32SYS;
+    want.channels = 1;
+    want.samples = 512;
+    want.callback = audio_cb;
+    /* No allowed changes: SDL resamples to 44.1kHz mono so the FFT
+     * bin -> avbank band mapping matches the CD-rate original. */
+    A.dev = SDL_OpenAudioDevice(NULL, 1, &want, &have, 0);
+    if (!A.dev) {
+        fprintf(stderr, "audio capture: %s\n", SDL_GetError());
+        return false;
+    }
+    SDL_PauseAudioDevice(A.dev, 0);
+    printf("audio capture: %d Hz, %d ch\n", have.freq, have.channels);
+    return true;
+}
+
+bool plat_audio_latest(float *buf, int n)
+{
+    if (!A.dev)
+        return false;
+    SDL_LockAudioDevice(A.dev);
+    uint32_t w = A.wpos;
+    if (w < (uint32_t)n) {
+        SDL_UnlockAudioDevice(A.dev);
+        return false;
+    }
+    for (int i = 0; i < n; i++)
+        buf[i] = A.ring[(w - (uint32_t)n + (uint32_t)i) & (AUD_RING - 1)];
+    SDL_UnlockAudioDevice(A.dev);
+    return true;
 }
 
 void plat_present_cry(const uint16_t *cry_pixels)

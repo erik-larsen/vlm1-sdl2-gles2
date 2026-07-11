@@ -8,12 +8,14 @@
  * the DVF feedback that fades/zooms the previous frame) are no-ops,
  * so plots currently accumulate — expected until beta lands.
  *
- * Keys: 1-9 effect, 8(*)+digit bank, Z/X/C = A/B/C buttons (ADSR),
+ * Keys: 1-9 effect, M(*)+digit bank, Z/X/C = A/B/C buttons (ADSR),
+ * A toggles live audio capture vs the synthetic test signal,
  * V toggles the engine diagnostic scope, Esc quits.
  */
 #include "platform.h"
 #include "engine.h"
 #include "fx.h"
+#include "audiofft.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -24,6 +26,8 @@ static uint16_t screens[2][VLM_SCREEN_W * VLM_SCREEN_H];
 static int draw_idx;
 static VlmEngine engine;
 static bool show_scope;
+static bool use_audio;      /* live capture vs synthetic test signal */
+static bool audio_running;
 static uint16_t scope_fb[VLM_SCREEN_W * VLM_SCREEN_H];
 
 /* Synthetic FFT: a slow bass thump + two wandering mid/high peaks, so
@@ -86,12 +90,20 @@ static bool tick(void)
     static uint32_t frame = 0;
     static uint32_t held_digits = 0;
     static bool held_v = false;
+    static bool held_a = false;
 
     if (!plat_poll())
         return false;
 
     uint32_t buttons = plat_buttons();
     engine.buttons = buttons;
+
+    if ((buttons & PAD_AUDIO) && !held_a) {
+        use_audio = !use_audio;
+        if (use_audio && !audio_running)
+            audio_running = plat_audio_start();
+    }
+    held_a = (buttons & PAD_AUDIO) != 0;
 
     /* effect/bank select: plain digit = effect, with * held = bank */
     for (int d = 1; d <= 9; d++) {
@@ -113,8 +125,14 @@ static bool tick(void)
      * after all fxobjs in omega), so render first, then update the
      * spectrum state. */
     vlm_engine_frame(&engine, screens[draw_idx], screens[draw_idx ^ 1]);
-    uint32_t fft[67];
-    test_spectrum(frame, fft);
+
+    uint32_t fft[VLM_SPECTRUM_BINS];
+    float samples[VLM_FFT_SIZE];
+    if (use_audio && audio_running
+        && plat_audio_latest(samples, VLM_FFT_SIZE))
+        vlm_audio_spectrum(samples, fft);
+    else
+        test_spectrum(frame, fft);
     vlm_engine_spectrum(&engine, fft);
 
     if (show_scope) {
@@ -143,6 +161,12 @@ int main(int argc, char **argv)
 
     vlm_engine_init(&engine);
     vlm_engine_select(&engine, 0, 1);
+
+    /* Try live audio up front (browser shows its mic permission
+     * prompt here); the synthetic test spectrum remains the fallback
+     * and the A key switches between them. */
+    audio_running = plat_audio_start();
+    use_audio = audio_running;
 
     plat_run(tick);
 
