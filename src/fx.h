@@ -103,5 +103,6 @@ static inline int32_t vlm_fx_fmult(int32_t a, int32_t b)
 void vlm_fx_alpha(VlmFxCtx *c);
 void vlm_fx_beta(VlmFxCtx *c);
 void vlm_fx_shu(VlmFxCtx *c);
+void vlm_fx_delta(VlmFxCtx *c);
 
 #endif

@@ -298,6 +298,9 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
     case 1:
         vlm_fx_beta(&c);
         break;
+    case 4:
+        vlm_fx_delta(&c);
+        break;
     case 9:
         vlm_fx_shu(&c);
         break;
