@@ -124,5 +124,6 @@ void vlm_fx_shu(VlmFxCtx *c);
 void vlm_fx_delta(VlmFxCtx *c);
 void vlm_fx_epsilon(VlmFxCtx *c);
 void vlm_fx_theta(VlmFxCtx *c);
+void vlm_fx_gamma(VlmFxCtx *c);
 
 #endif
