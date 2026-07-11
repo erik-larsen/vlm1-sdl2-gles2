@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 #include "banks.h"
+#include "fx.h"
 
 typedef struct {
     uint8_t matrix[VLM_MATRIX_SIZE]; /* decompressed current bank */
@@ -50,6 +51,9 @@ typedef struct {
 
     /* OP display scale word, written by beta from `thang` */
     uint16_t skale;
+
+    /* Particle pools (pobjs[2]) for theta/epsilon */
+    VlmParticlePool pools[2];
 
     uint32_t buttons;      /* PAD_* bitmask for ADSR triggers */
 } VlmEngine;

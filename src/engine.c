@@ -290,6 +290,7 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
         .echo_run = 0,
         .skale = e->skale,
         .absdelta = e->absdelta,
+        .pools = e->pools,
     };
     switch (gpu >> 16) {
     case 0:
@@ -300,6 +301,12 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
         break;
     case 4:
         vlm_fx_delta(&c);
+        break;
+    case 5:
+        vlm_fx_epsilon(&c);
+        break;
+    case 6:
+        vlm_fx_theta(&c);
         break;
     case 9:
         vlm_fx_shu(&c);

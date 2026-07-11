@@ -16,6 +16,23 @@
 #define VLM_SCREEN_H 384
 #define VLM_CLIP_W 0x17E /* r15 in the modules */
 
+/* Particle pools shared by theta (simulate) and epsilon (render).
+ * 32-byte records on the Jaguar (theta.gas comments); native layout
+ * here since only these two modules touch them. */
+#define VLM_PARTICLE_SLOTS 512
+
+typedef struct {
+    int32_t x, y, z;        /* 16.16 */
+    uint16_t colour;        /* CC<<8 pixel word */
+    uint16_t life;          /* intensity; 0 = free slot */
+    int32_t vx, vy, vz;
+} VlmParticle;
+
+typedef struct {
+    int32_t count;
+    VlmParticle p[VLM_PARTICLE_SLOTS];
+} VlmParticlePool;
+
 typedef struct VlmFxCtx VlmFxCtx;
 struct VlmFxCtx {
     uint16_t *screen;     /* draw buffer (r23 / dscreen) */
@@ -25,6 +42,7 @@ struct VlmFxCtx {
     int echo_run;         /* draw_screen+4 bit0: 1 = delay-line echo run */
     uint16_t skale;       /* OP display-scale word written by beta */
     const uint32_t *absdelta; /* 64-band peak-hold spectrum (lol[7]) */
+    VlmParticlePool *pools;   /* pobjs[2] (lol[3]) */
 
     /* Module-register state used by the shared plot path */
     uint32_t cc_pix;      /* r5: CC << 8 */
@@ -104,5 +122,7 @@ void vlm_fx_alpha(VlmFxCtx *c);
 void vlm_fx_beta(VlmFxCtx *c);
 void vlm_fx_shu(VlmFxCtx *c);
 void vlm_fx_delta(VlmFxCtx *c);
+void vlm_fx_epsilon(VlmFxCtx *c);
+void vlm_fx_theta(VlmFxCtx *c);
 
 #endif
