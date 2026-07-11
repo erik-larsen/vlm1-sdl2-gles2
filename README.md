@@ -29,14 +29,18 @@ fixed-point math.
       beta (DVF feedback), gamma (Gouraud polygons), delta (plasma),
       epsilon+theta (particles), shu (spectrum dots), and the dbeast
       delay-line ghost system (sigma/tau are unused by presets)
+- [x] Live audio input: SDL capture (mic/loopback; getUserMedia in
+      the browser) → 256-point FFT → the DSP's magnitude format, with
+      a synthetic test-signal fallback (`A` key toggles)
 - [ ] delta submodes 0/3 (logo bitmaps; OP object recolour)
-- [ ] Audio input (SDL capture → FFT → the DSP magnitude format);
-      currently driven by a synthetic test spectrum
 - [ ] Object-processor composition (visible window/scale), text
       overlay/editor UI, splash
 
-All 9 banks render their preset effects; `V` toggles a diagnostic
-scope of the animation engine.
+All 9 banks render their preset effects reacting to live audio; `V`
+toggles a diagnostic scope of the animation engine. First launch asks
+for microphone permission (deny it and the test signal drives the
+visuals instead). To visualize system audio on macOS, route it
+through a loopback device (e.g. BlackHole) set as default input.
 
 ## Building
 
