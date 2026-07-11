@@ -109,10 +109,13 @@ static bool tick(void)
         show_scope = !show_scope;
     held_v = (buttons & PAD_SCOPE) != 0;
 
+    /* Modules read the psi outputs of the PREVIOUS frame (psi runs
+     * after all fxobjs in omega), so render first, then update the
+     * spectrum state. */
+    vlm_engine_frame(&engine, screens[draw_idx], screens[draw_idx ^ 1]);
     uint32_t fft[67];
     test_spectrum(frame, fft);
     vlm_engine_spectrum(&engine, fft);
-    vlm_engine_frame(&engine, screens[draw_idx], screens[draw_idx ^ 1]);
 
     if (show_scope) {
         draw_scope();

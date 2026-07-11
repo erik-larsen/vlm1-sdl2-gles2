@@ -289,6 +289,7 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
         .submode = gpu & 0xFFFF,
         .echo_run = 0,
         .skale = e->skale,
+        .absdelta = e->absdelta,
     };
     switch (gpu >> 16) {
     case 0:
@@ -296,6 +297,9 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
         break;
     case 1:
         vlm_fx_beta(&c);
+        break;
+    case 9:
+        vlm_fx_shu(&c);
         break;
     default:
         break;

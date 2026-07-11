@@ -39,7 +39,7 @@ int32_t vlm_fx_wave_unsigned(const uint8_t *tab, uint32_t phase)
 
 /* ---- plot routines (alpha.gas:627-671, 906-983, 1016-1022) --------- */
 
-static void plot_1x1(VlmFxCtx *c, int32_t x, int32_t y)
+void vlm_fx_plot_1x1(VlmFxCtx *c, int32_t x, int32_t y)
 {
     if (x >= VLM_CLIP_W || y >= VLM_CLIP_W || x < 0 || y < 0)
         return;
@@ -47,7 +47,7 @@ static void plot_1x1(VlmFxCtx *c, int32_t x, int32_t y)
     c->screen[y * VLM_SCREEN_W + x] = pix;
 }
 
-static void plot_2x2(VlmFxCtx *c, int32_t x, int32_t y)
+void vlm_fx_plot_2x2(VlmFxCtx *c, int32_t x, int32_t y)
 {
     if (x >= VLM_CLIP_W || y >= VLM_CLIP_W || x < 0 || y < 0)
         return;
@@ -62,16 +62,8 @@ static void plot_2x2(VlmFxCtx *c, int32_t x, int32_t y)
 }
 
 /* N x N solid fill via the blitter (alpha.gas:919-983). */
-static void plot_nxn(VlmFxCtx *c, int32_t x, int32_t y, int32_t n)
+void vlm_fx_plot_fill_n(VlmFxCtx *c, int32_t x, int32_t y, int32_t n)
 {
-    if (n == 1) {
-        plot_1x1(c, x, y);
-        return;
-    }
-    if (n == 2) {
-        plot_2x2(c, x, y);
-        return;
-    }
     int32_t lim = VLM_CLIP_W - n;
     int32_t x0 = x - (n >> 1);
     if (x0 < 0 || x0 > lim)
@@ -87,26 +79,41 @@ static void plot_nxn(VlmFxCtx *c, int32_t x, int32_t y, int32_t n)
     }
 }
 
+/* Alpha-family size dispatch: 1 -> 1x1, 2 -> 2x2, else blitter fill. */
+static void plot_sized(VlmFxCtx *c, int32_t x, int32_t y, int32_t n)
+{
+    if (n == 1)
+        vlm_fx_plot_1x1(c, x, y);
+    else if (n == 2)
+        vlm_fx_plot_2x2(c, x, y);
+    else
+        vlm_fx_plot_fill_n(c, x, y, n);
+}
+
 /* Dispatch on the plot_mod field. The original's 4-entry table at
  * module offset $9B0 is {2x2, 2x2, size-dispatch, intensity-scaled
  * size-dispatch} (verified against vlm.abs). */
 static void plot_point(VlmFxCtx *c, int32_t x, int32_t y)
 {
+    if (c->plot) {
+        c->plot(c, x, y);
+        return;
+    }
     switch (c->plot_mode & 3) {
     case 0:
     case 1:
-        plot_2x2(c, x, y);
+        vlm_fx_plot_2x2(c, x, y);
         break;
     case 2:
-        plot_nxn(c, x, y,
-                 (int32_t)(vlm_be32(c->fx + FX_PIXSIZE) >> 16) + 1);
+        plot_sized(c, x, y,
+                   (int32_t)(vlm_be32(c->fx + FX_PIXSIZE) >> 16) + 1);
         break;
     case 3: {
         /* alpha.gas:1016-1022: N = ((intensity * pixscale) &
          * $7F0000)>>16 + 1 — dot size scales with brightness. */
         uint32_t v = (vlm_fx_mult(c->intensity, c->pixscale)
                       & 0x7F0000) >> 16;
-        plot_nxn(c, x, y, (int32_t)v + 1);
+        plot_sized(c, x, y, (int32_t)v + 1);
         break;
     }
     }
@@ -196,7 +203,10 @@ static void rot_engine(VlmFxCtx *c, int32_t x, int32_t y)
         colb += vlm_be32(fx + FX_CVX);
         colc += vlm_be32(fx + FX_CVY);
 
-        mirror_chain(c, px, py);
+        if (c->chain)
+            c->chain(c, px, py);
+        else
+            mirror_chain(c, px, py);
 
         /* per-copy continue (alpha.gas:527-553): re-derive dx/dy from
          * the ORIGINAL offsets each copy (not compounding), drift the
@@ -218,6 +228,8 @@ void vlm_fx_symmetry_plot(VlmFxCtx *c, int32_t x, int32_t y)
 {
     if (c->asym & 0x10000)
         rot_engine(c, x, y);
+    else if (c->chain)
+        c->chain(c, x, y);
     else
         mirror_chain(c, x, y);
 }

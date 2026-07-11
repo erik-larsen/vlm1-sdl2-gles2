@@ -16,13 +16,15 @@
 #define VLM_SCREEN_H 384
 #define VLM_CLIP_W 0x17E /* r15 in the modules */
 
-typedef struct {
+typedef struct VlmFxCtx VlmFxCtx;
+struct VlmFxCtx {
     uint16_t *screen;     /* draw buffer (r23 / dscreen) */
     const uint16_t *cscreen; /* previous completed frame (feedback src) */
     uint8_t *fx;          /* fxobj big-endian byte image (r3) */
     uint32_t submode;     /* low word of the gpu field ($F03F5C) */
     int echo_run;         /* draw_screen+4 bit0: 1 = delay-line echo run */
     uint16_t skale;       /* OP display-scale word written by beta */
+    const uint32_t *absdelta; /* 64-band peak-hold spectrum (lol[7]) */
 
     /* Module-register state used by the shared plot path */
     uint32_t cc_pix;      /* r5: CC << 8 */
@@ -30,7 +32,13 @@ typedef struct {
     uint32_t asym;        /* r22: asym_fla */
     uint32_t pixscale;    /* (r14+$1b): pixsize >> 16 */
     int plot_mode;        /* plot_mod field ($E8), 0..3 */
-} VlmFxCtx;
+
+    /* Per-module hooks: final plot dispatch (the module's plot-routine
+     * table) and the mirror-chain variant. NULL selects the alpha
+     * versions. */
+    void (*plot)(VlmFxCtx *c, int32_t x, int32_t y);
+    void (*chain)(VlmFxCtx *c, int32_t x, int32_t y);
+};
 
 /* Shared helpers (fx_common.c) */
 
@@ -47,6 +55,13 @@ int32_t vlm_fx_wave_unsigned(const uint8_t *tab, uint32_t phase);
 /* Full symmetry entry ($F03392): rotational-symmetry engine when
  * asym_fla bit16 is set, else the mirror chain, ending in plots. */
 void vlm_fx_symmetry_plot(VlmFxCtx *c, int32_t x, int32_t y);
+
+/* Building-block plots shared by module plot tables. */
+void vlm_fx_plot_1x1(VlmFxCtx *c, int32_t x, int32_t y);
+void vlm_fx_plot_2x2(VlmFxCtx *c, int32_t x, int32_t y);
+/* Bounds-checked n x n fill centred on (x,y) (the blitter path); does
+ * NOT redirect small n to the fast paths. */
+void vlm_fx_plot_fill_n(VlmFxCtx *c, int32_t x, int32_t y, int32_t n);
 
 /* GPU unsigned divide (div by 0 yields all-ones like the hardware). */
 static inline uint32_t vlm_fx_udiv(uint32_t n, uint32_t d)
@@ -87,5 +102,6 @@ static inline int32_t vlm_fx_fmult(int32_t a, int32_t b)
 /* Modules */
 void vlm_fx_alpha(VlmFxCtx *c);
 void vlm_fx_beta(VlmFxCtx *c);
+void vlm_fx_shu(VlmFxCtx *c);
 
 #endif
