@@ -17,6 +17,7 @@
 #include "fx.h"
 #include "audiofft.h"
 #include "logos_data.h"
+#include "board.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -111,6 +112,8 @@ static void build_view(const uint16_t *src)
         for (int x = 0; x < VIEW_W; x++)
             drow[x] = srow[x >> s];
     }
+
+    vlm_board_composite(view, VIEW_W, VIEW_H);
 
     if (engine.logo_active) {
         /* display x -> view x is +8 (the main screen object sits at
