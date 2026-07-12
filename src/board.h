@@ -18,8 +18,10 @@ extern int vlm_board_visible;
 
 void vlm_board_clear(void);
 
-/* Blit one 8x8 glyph at pixel position (x, y) (charblit). */
-void vlm_board_char(int x, int y, uint8_t ch);
+/* Blit one 8x8 glyph at text cell (col, row) — cells are 8x9 px
+ * (charblit, vlm.s:6291); the whole cell is overwritten, inverted
+ * when inverse != 0. */
+void vlm_board_char(int col, int row, uint8_t ch, int inverse);
 
 /* Composite the board over a 384x240 CRY view buffer (view position:
  * display X+8 = 32, Y/2 = 30). */

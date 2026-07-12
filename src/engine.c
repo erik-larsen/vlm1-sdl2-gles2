@@ -18,8 +18,8 @@ enum {
 };
 
 /* avbank defaults: {start_bin, end_bin, trig_min, release_min}
- * (vlm.s:8522-8534). */
-static const uint16_t avbank[5][4] = {
+ * (vlm.s:8522-8534). Live copy sits in the engine (editable). */
+static const uint16_t avbank_init[5][4] = {
     {  1,  6, 0x7000, 0x1000 },
     {  7, 10, 0x6000, 0x1000 },
     { 11, 24, 0x5000, 0x1000 },
@@ -45,8 +45,9 @@ void vlm_engine_init(VlmEngine *e)
     vlm_waves_init();
     vlm_init_refblock();
     init_param_meta();
+    memcpy(e->avbank, avbank_init, sizeof e->avbank);
     for (int b = 0; b < 5; b++)
-        e->band_trigmin[b] = avbank[b][2];
+        e->band_trigmin[b] = e->avbank[b][2];
     e->effect = 1;
     e->skale = 1; /* everything() default (vlm.s:345); beta rewrites
                      it each frame from the DVF's thang */
@@ -233,7 +234,7 @@ void vlm_engine_spectrum(VlmEngine *e, const uint32_t *fft67)
     uint8_t toggles = (uint8_t)(e->trig >> 8);
     for (int b = 0; b < 5; b++) {
         uint32_t peak = 0;
-        for (int k = avbank[b][0]; k <= avbank[b][1]; k++)
+        for (int k = e->avbank[b][0]; k <= e->avbank[b][1]; k++)
             if (e->absdelta[k] > peak)
                 peak = e->absdelta[k];
         peak *= 2;
@@ -252,7 +253,7 @@ void vlm_engine_spectrum(VlmEngine *e, const uint32_t *fft67)
             e->band_trigmin[b] = e->band_trigmin[b] > 0x300 ?
                                  (uint16_t)(e->band_trigmin[b] - 0x300) : 0;
         }
-        if (avbank[b][3] >= peak)
+        if (e->avbank[b][3] >= peak)
             trigbits &= (uint8_t)~(1 << b);
     }
     e->trig = (uint16_t)((toggles << 8) | trigbits);

@@ -18,8 +18,10 @@
 #include "audiofft.h"
 #include "logos_data.h"
 #include "board.h"
+#include "editor.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -149,8 +151,13 @@ static bool tick(void)
     if (!plat_poll())
         return false;
 
+    static int editor_active;
     uint32_t buttons = plat_buttons();
     engine.buttons = buttons;
+    /* While editing, symadj reads the player-2 pad for px/py
+     * (vlm.s:868-871) — with one pad, the d-pad goes to the editor. */
+    if (editor_active)
+        engine.buttons &= ~(PAD_UP | PAD_DOWN | PAD_LEFT | PAD_RIGHT);
 
     /* Boot splash: the Jaguar-logo wait screen (bank 10 effect 5,
      * LaunchVLM vlm.s:228-235) until a digit is pressed or ~10s. */
@@ -174,7 +181,7 @@ static bool tick(void)
     held_a = (buttons & PAD_AUDIO) != 0;
 
     /* effect/bank select: plain digit = effect, with * held = bank */
-    if (!splash) {
+    if (!splash && !editor_active) {
         for (int d = 1; d <= 9; d++) {
             uint32_t bit = PAD_DIGIT(d);
             if ((buttons & bit) && !(held_digits & bit)) {
@@ -195,6 +202,7 @@ static bool tick(void)
      * after all fxobjs in omega), so render first, then update the
      * spectrum state. */
     vlm_engine_frame(&engine, screens[draw_idx], screens[draw_idx ^ 1]);
+    editor_active = vlm_editor_frame(&engine, buttons, screens[draw_idx]);
 
     uint32_t fft[VLM_SPECTRUM_BINS];
     float samples[VLM_FFT_SIZE];
@@ -219,6 +227,13 @@ static bool tick(void)
 
 int main(int argc, char **argv)
 {
+    /* The emscripten shell can invoke main a second time when an
+     * async run dependency (audio-worklet startup) releases after
+     * load; guard against double init. */
+    static int ran;
+    if (ran)
+        return 0;
+    ran = 1;
     plat_bootstrap(argc, argv);
 
     PlatformConfig cfg = {

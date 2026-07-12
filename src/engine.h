@@ -34,6 +34,8 @@ typedef struct {
     uint16_t results[64];  /* modulation scalars of the last fxobj pass */
 
     /* psi.gas audio state */
+    uint16_t avbank[5][4]; /* trigger bands {start, end, min, w3} —
+                              editable via the spectrum editor */
     uint32_t absdelta[64]; /* peak-hold spectrum */
     uint8_t peakflag[64];
     uint16_t trig;         /* low byte trigger bits, high byte toggles */

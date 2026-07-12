@@ -12,23 +12,27 @@ void vlm_board_clear(void)
     memset(vlm_board, 0, sizeof vlm_board);
 }
 
-void vlm_board_char(int x, int y, uint8_t ch)
+void vlm_board_char(int col, int row, uint8_t ch, int inverse)
 {
-    if (ch >= 138)
+    if (ch >= 142)
         return;
     uint32_t off = vlm_be16(vlm_font + 4 + (uint32_t)ch * 2);
+    /* char 4's index (1040) points past the glyph data; give it the
+     * hollow-box glyph as the doc recommends */
     if (off + 8 > VLM_FONT_SIZE)
-        return;
+        off = 1032;
     const uint8_t *glyph = vlm_font + off;
-    for (int row = 0; row < 8; row++) {
-        int by = y + row;
+    int x = col * 8, y = row * 9;
+    for (int r = 0; r < 8; r++) {
+        int by = y + r;
         if (by < 0 || by >= VLM_BOARD_H)
             continue;
+        uint8_t bits = inverse ? (uint8_t)~glyph[r] : glyph[r];
         for (int bit = 0; bit < 8; bit++) {
             int bx = x + bit;
             if (bx < 0 || bx >= VLM_BOARD_W)
                 continue;
-            if (glyph[row] & (0x80 >> bit))
+            if (bits & (0x80 >> bit))
                 vlm_board[by * VLM_BOARD_STRIDE + (bx >> 3)] |=
                     (uint8_t)(0x80 >> (bx & 7));
             else
