@@ -35,8 +35,12 @@ fixed-point math.
 - [x] Object-processor display window: the NTSC-visible 384x240 crop
       of the render buffer, with the per-effect `skale` zoom (1x/2x/4x)
       that beta drives from the preset's Thang parameter
-- [ ] delta submodes 0/3 (logo bitmaps; OP object recolour)
-- [ ] Text overlay/editor UI, pad-inertia controls, splash screen
+- [x] Boot splash: the Jaguar CD wait screen (bank 10, plasma sunburst
+      + the pulsing red JAGUAR logo via delta mode 3 / clut_sha),
+      auto-advancing into the VLM; all delta submodes now ported
+- [x] Pad-inertia user controls (symadj): arrows steer the px/py
+      oscillator waveforms with hardware acceleration/friction
+- [ ] Text overlay/editor UI (the hidden effects editor)
 
 All 9 banks render their preset effects reacting to live audio; `V`
 toggles a diagnostic scope of the animation engine. First launch asks
