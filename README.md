@@ -40,10 +40,11 @@ fixed-point math.
       auto-advancing into the VLM; all delta submodes now ported
 - [x] Pad-inertia user controls (symadj): arrows steer the px/py
       oscillator waveforms with hardware acceleration/friction
-- [x] The hidden effects editor (core): entry combos, menu tree with
-      the hidden 8-wrap root, live Spectrum & Triggers editing, and
-      parameter sliders with the original widget displays
-- [ ] Editor: waveform attach, source-wave editor, keypad screens
+- [x] The hidden effects editor: entry combos, the menu tree with the
+      hidden 8-wrap root, live Spectrum & Triggers editing, parameter
+      sliders with the original widget displays, waveform attach
+      (link oscillators/envelopes to any parameter), the source-wave
+      editor, and the symmetry-planes / trigger-mask keypad screens
 
 All 9 banks render their preset effects reacting to live audio; `V`
 toggles a diagnostic scope of the animation engine. First launch asks
@@ -74,8 +75,12 @@ user waveforms), Esc quits.
 The hidden editor: hold `7`+`M`+`0`+`3` (the original cheat combo) or
 press `P` to open Spectrum and Triggers; wrap the menu downward 8
 times for the hidden Edit Mode root — or press `O` to jump straight
-there. Inside: arrows navigate/adjust, `Z` and `C` select or step
-between parameters, `X` backs out to the menu.
+there. Inside: arrows navigate/adjust, `Z`/`X`/`C` are A/B/C (select,
+back, next), and number keys drive the keypad screens. While editing a
+parameter, `M` (`*`) opens waveform attach — number keys 1-8 link the
+oscillators to that parameter so it animates. "Edit source waves" tunes
+the eight oscillators; "Symmetry Types" toggles the mirror/rotational
+planes live.
 
 ## Layout
 
