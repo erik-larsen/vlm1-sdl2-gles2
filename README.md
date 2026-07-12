@@ -40,7 +40,10 @@ fixed-point math.
       auto-advancing into the VLM; all delta submodes now ported
 - [x] Pad-inertia user controls (symadj): arrows steer the px/py
       oscillator waveforms with hardware acceleration/friction
-- [ ] Text overlay/editor UI (the hidden effects editor)
+- [x] The hidden effects editor (core): entry combos, menu tree with
+      the hidden 8-wrap root, live Spectrum & Triggers editing, and
+      parameter sliders with the original widget displays
+- [ ] Editor: waveform attach, source-wave editor, keypad screens
 
 All 9 banks render their preset effects reacting to live audio; `V`
 toggles a diagnostic scope of the animation engine. First launch asks
