@@ -42,12 +42,15 @@ typedef struct {
 } Inert;
 
 enum {
+    /* 1..6 must stay contiguous: crunt sets editing = edvex_byte + 1
+     * (crot=1 -> XY1=2, snglx=2 -> X_ONE=3, ...). */
     ED_OFF = 0, ED_SELECTOR, ED_XY1, ED_X_ONE, ED_X_ONE_2, ED_XY1_2,
     ED_XY1_3, ED_SPECED, ED_SPECED2, ED_SPECED3,
+    ED_AWF, ED_SPDINC, ED_KPAD,
 };
 enum {
     SY_NONE = 0, SY_CROT, SY_SNGLX, SY_SISNGLX, SY_SIDBL, SY_DVECT,
-    SY_RRTS, SY_WSSHOW, SY_SHSPEC,
+    SY_RRTS, SY_WSSHOW, SY_SHSPEC, SY_AWF,
 };
 
 static struct {
@@ -76,6 +79,10 @@ static struct {
     char eltxt[16][40];
     int elcount;
     int param_screen_is_sym; /* which list foredit/symedit rebuilt */
+
+    int wsel;            /* selected oscillator 0-7 (source-wave editor) */
+    int kpad_is_sym;     /* 1 = symmetry planes (asym_fla), 0 = trig mask */
+    int antelope;        /* wave-attach: next key toggles envelope bit */
 } ed;
 
 /* ---- print pipeline (print, 3928) ------------------------------------ */
@@ -464,6 +471,9 @@ static void edit2(void);
 static void foredit(void);
 static void symedit(void);
 static void eparam(void);
+static void wsedit(void);
+static void init_sym(void);
+static void init_byt(void);
 static void unquit(void);
 
 static const EdOption option7[] = {
@@ -560,7 +570,7 @@ static void thisfx(void)
 static const EdOption option2[] = {
     { "Edit source function", foredit },
     { "Edit symmetry generator", symedit },
-    { "Edit source waves", unquit }, /* wave editor: next increment */
+    { "Edit source waves", wsedit },
 };
 static const EdList list_edit2 = { 2, 0, bline1, option2 };
 
@@ -663,10 +673,12 @@ static void eparam(void)
     const VlmPbInfo *pb = ed.elvex[sel];
     ed.eddie = pb;
 
-    if (pb->edvex == 6 || pb->edvex == 7) {
-        /* symmetry-planes / trigger-mask keypad screens: next
-         * increment */
-        unquit();
+    if (pb->edvex == 6) { /* Symmetry Types / plot routine */
+        init_sym();
+        return;
+    }
+    if (pb->edvex == 7) { /* Trigger mask */
+        init_byt();
         return;
     }
 
@@ -784,6 +796,8 @@ static void speced3_input(void)
         bp[2] = (uint16_t)(bp[2] - 0x100);
 }
 
+static void awf_enter(void);
+
 /* x_one/xy1 + spn_butt/pn_butte (5156-5226) */
 static void param_input(int both_axes)
 {
@@ -794,6 +808,14 @@ static void param_input(int both_axes)
         int dy = ((ed.buttons & PAD_UP) ? 1 : 0)
                  | ((ed.buttons & PAD_DOWN) ? 2 : 0);
         inertcon(&ed.iycon, dy);
+    }
+    if (ed.shot & PAD_STAR) {
+        /* spn_butt (5181): '*' opens waveform attach for this param */
+        ed.action = awf_enter;
+        ed.editing = ED_OFF;
+        ed.symed = SY_NONE;
+        ed.seldb = 1;
+        return;
     }
     if (ed.shot & PAD_B) {
         ed.action = ed.ledit; /* bbexit: back to the menu */
@@ -811,6 +833,354 @@ static void param_input(int both_axes)
         ed.symed = SY_NONE;
         ed.seldb = 1;
     }
+}
+
+/* Newly-pressed keypad key -> 0..9, 10='*', 11='#', or -1. */
+static int kpad_key(void)
+{
+    for (int d = 0; d <= 9; d++)
+        if (ed.shot & PAD_DIGIT(d))
+            return d;
+    if (ed.shot & PAD_STAR)
+        return 10;
+    if (ed.shot & PAD_HASH)
+        return 11;
+    return -1;
+}
+
+/* ---- waveform attach (wfa/iawfx, §5.6) -------------------------------- */
+/*
+ * Link long at fxobj+256+i*4 (big-endian): byte0 = envelope (secondary)
+ * bits, byte1 = oscillator (attach) bits, low word = amplitude. The
+ * modulation base is copied to fxobj+512+i*4 on creation; omega's
+ * BigLoop64 (engine.c) computes live = base + Σ osc·amp − max/2.
+ * Keys 1-8 toggle oscillators, `#` prefixes a key to toggle the paired
+ * envelope bit instead, d-pad L/R sets amplitude. Any fire exits back
+ * to the parameter editor.
+ */
+static uint8_t *awf_link(void)
+{
+    return cur_fx() + 256 + ed.eddie->param_index * 4;
+}
+
+static void awf_board(void)
+{
+    cprint("Attach and Adjust Waveforms/");
+    ed_print("Keys 1-8 link waveforms (# + key = envelope)/");
+    ed_print("Joypad L/R sets amplitude");
+    ed_print("~g2:8:Oscillators:~g2:10:Envelopes:");
+    ed_print("~g1:20:Press any FIRE button to exit");
+}
+
+static void awf_enter(void)
+{
+    uint8_t *fx = cur_fx();
+    if (!fx || !ed.eddie)
+        return;
+    uint8_t *link = fx + 256 + ed.eddie->param_index * 4;
+    if (vlm_be32(link) == 0) {
+        /* wlink (844): seed the modulation base, amplitude $8000. */
+        vlm_wbe32(fx + 512 + ed.eddie->param_index * 4,
+                  vlm_be32(fx + ed.eddie->param_index * 4));
+        vlm_wbe32(link, 0x8000);
+    }
+    ed.ixcon.val = (int32_t)((vlm_be32(link) & 0xFFFF) << 8);
+    ed.ixcon.vel = 0;
+    ed.editing = ED_AWF;
+    ed.symed = SY_AWF;
+    ed.antelope = 0;
+    awf_board();
+}
+
+static void awf_input(void)
+{
+    uint8_t *link = awf_link();
+    uint32_t lw = vlm_be32(link);
+
+    int dx = ((ed.buttons & PAD_LEFT) ? 1 : 0)
+             | ((ed.buttons & PAD_RIGHT) ? 2 : 0);
+    inertcon(&ed.ixcon, dx);
+    lw = (lw & 0xFFFF0000u) | ((uint32_t)(ed.ixcon.val >> 8) & 0xFFFF);
+
+    int k = kpad_key();
+    if (k == 11) {
+        /* '#': next key toggles the envelope (secondary) bit */
+        ed.antelope = 1;
+    } else if (k >= 1 && k <= 8) {
+        int shift = ed.antelope ? (24 + k - 1) : (16 + k - 1);
+        lw ^= (1u << shift);
+        ed.antelope = 0;
+        ed.seldb = 1;
+    }
+    vlm_wbe32(link, lw);
+
+    if (ed.shot & (PAD_A | PAD_B | PAD_C)) {
+        /* back into the parameter editor for this same param */
+        ed.action = eparam;
+        ed.editing = ED_OFF;
+        ed.symed = SY_NONE;
+        ed.seldb = 1;
+    }
+}
+
+static void dv_awf(void)
+{
+    uint8_t *link = awf_link();
+    uint32_t lw = vlm_be32(link);
+    uint8_t osc = (lw >> 16) & 0xFF;
+    uint8_t env = (lw >> 24) & 0xFF;
+    for (int i = 0; i < 8; i++) {
+        vlm_board_char(4 + i * 2, 9, (uint8_t)('1' + i), (osc >> i) & 1);
+        vlm_board_char(4 + i * 2, 11, (uint8_t)('1' + i), (env >> i) & 1);
+    }
+    /* amplitude fill-bar (like snglx) */
+    int v = (int)((ed.ixcon.val >> 16) & 0xFF);
+    sfill(0x3E, 0x94, 0x102, 0x0E, 0x80FF);
+    sfill(0x40, 0x96, v + 1, 0x0A, (uint16_t)(0xFF00 | v));
+}
+
+/* ---- source-wave editor (wsedit, §5.7) -------------------------------- */
+/*
+ * Edits the 8 oscillators in the fxobj bank (bytes 768+n*16):
+ * {phase.l, rate.l, table.l, ..., type.w@+14}. Up/Down pick the
+ * oscillator, keypad or nothing sets the wave type, L/R nudge phase,
+ * A/C nudge rate, B exits.
+ */
+static const char *const wave_names[9] = {
+    "Sine wave", "Sawtooth wave", "Square wave", "Ramp",
+    "Rectified sine wave", "Noise", "Constant",
+    "User control Y", "User control X",
+};
+
+static uint8_t *osc_rec(int n)
+{
+    return cur_fx() + 768 + n * 16;
+}
+
+static void wtud(void)
+{
+    uint8_t *o = osc_rec(ed.wsel);
+    int type = vlm_be16(o + 14);
+    if (type < 0 || type > 8)
+        type = 0;
+    /* clear the type line then reprint (fixed 20-col field) */
+    print_at(2, 12, "                    ");
+    print_at(2, 12, wave_names[type]);
+}
+
+static void wsedit(void)
+{
+    push_screen(edit2);
+    ed.wsel = 0;
+    static EdOption op[8];
+    static char labels[8][4];
+    for (int i = 0; i < 8; i++) {
+        snprintf(labels[i], sizeof labels[i], "%d:", i + 1);
+        op[i].text = labels[i];
+        op[i].act = NULL;
+    }
+    static EdList l;
+    l.selectable = 7;
+    l.selected = 0;
+    l.bottom = "~g1:20:<A> ADD    <B> EXIT   <C> SUB";
+    l.opt = op;
+    ed.ledit = wsedit;
+    ed.list = l;
+    ed.actime = -1;
+    ed.cursx = 1;
+    ed.cursy = 1;
+    ed_print("@~g1:1:Edit basic waveforms~e3:3:");
+    ed.symed = SY_WSSHOW;
+    ed.editing = ED_SPDINC;
+    wtud();
+}
+
+static void osc_set_type(int type)
+{
+    uint8_t *o = osc_rec(ed.wsel);
+    o[14] = (uint8_t)(type >> 8);
+    o[15] = (uint8_t)type;
+    /* keep the table pointer coherent for the constant path */
+    uint32_t addr = VLM_P_SINES_ADDR + (type <= 4 ? (uint32_t)type * 0x104 : 0);
+    vlm_wbe32(o + 8, addr);
+    wtud();
+}
+
+/* physical key -> wave type (§5.7 clean mapping) */
+static void spdinc_key(int k)
+{
+    static const int keymap[10] = {
+        -1, 6, 1, 2, 3, 4, 5, 0, 7, 8  /* keys 0..9 -> type */
+    };
+    if (k >= 0 && k <= 9 && keymap[k] >= 0)
+        osc_set_type(keymap[k]);
+}
+
+static void spdinc_input(void)
+{
+    if (ed.shot & PAD_UP) {
+        if (--ed.wsel < 0)
+            ed.wsel = 7;
+        ed.list.selected = ed.wsel;
+        ed.action = ud_selcu;
+        wtud();
+        return;
+    }
+    if (ed.shot & PAD_DOWN) {
+        if (++ed.wsel > 7)
+            ed.wsel = 0;
+        ed.list.selected = ed.wsel;
+        ed.action = ud_selcu;
+        wtud();
+        return;
+    }
+    uint8_t *o = osc_rec(ed.wsel);
+    if (ed.shot & PAD_LEFT)
+        vlm_wbe32(o, vlm_be32(o) - 0x10000);
+    else if (ed.shot & PAD_RIGHT)
+        vlm_wbe32(o, vlm_be32(o) + 0x10000);
+
+    if (ed.shot & PAD_A)
+        vlm_wbe32(o + 4, (vlm_be32(o + 4) + 0x1000) & 0x1FFFFF);
+    else if (ed.shot & PAD_C)
+        vlm_wbe32(o + 4, (vlm_be32(o + 4) - 0x1000) & 0x1FFFFF);
+    else if (ed.shot & PAD_B) {
+        ed.editing = ED_SELECTOR;
+        ed.symed = SY_NONE;
+        onstak();
+        ed.seldb = 1;
+        return;
+    }
+    int k = kpad_key();
+    if (k >= 0)
+        spdinc_key(k);
+}
+
+static void dv_wsshow(void)
+{
+    for (int n = 0; n < 8; n++) {
+        uint8_t *o = osc_rec(n);
+        uint32_t rate = vlm_be32(o + 4);
+        uint32_t rol = (rate << 3) | (rate >> 29);
+        int sw = (int)((rol >> 16) & 0xFFFF) + 1;
+        if (sw > 0xC0)
+            sw = 0xC0;
+        int pw = (int)(vlm_be32(o) & 0xFF) + 1;
+        uint16_t sc = (n == ed.wsel) ? 0xFFFF : 0x58FF;
+        sfill(0x50, 0x71 + n * 9, sw, 3, sc);
+        sfill(0x50, 0x74 + n * 9, pw, 1, 0x80FF);
+    }
+}
+
+/* ---- symmetry / trigger-mask keypad screens (§5.4/5.5) ---------------- */
+/*
+ * init_sym edits asym_fla (which mirror/rotational planes are on);
+ * init_byt edits the trigger mask _mtrig+3. Both are keypad screens:
+ * number keys toggle bits (exact key->bit maps below), the current
+ * state shows as highlighted digits. Button positions here are a
+ * clean port layout, not a pixel-transcription of the ROM's
+ * (interleaved) symbutts/awfb2 coordinate tables; the key->bit
+ * behaviour is faithful.
+ */
+
+/* asym_fla is the long at FX_ASYM_FLA; sym bits live in the low byte
+ * (offset +3), rotational is bit16 (byte +1, bit0). */
+static void sym_key(int k)
+{
+    uint8_t *fx = cur_fx();
+    uint8_t *a = fx + FX_ASYM_FLA;
+    switch (k) {
+    case 10: /* '*' = clear: asym_fla = 1 */
+        vlm_wbe32(a, 1);
+        break;
+    case 11: /* '#' = invert planes+rot */
+        vlm_wbe32(a, vlm_be32(a) ^ 0x100FF);
+        break;
+    case 9: /* rotational toggle (bit16) */
+        vlm_wbe32(a, vlm_be32(a) ^ 0x10000);
+        break;
+    default: {
+        /* keys 1-8 -> plane bit (§5.4 net map) */
+        static const int keybit[9] = { -1, 7, 1, 5, 6, 2, 3, 0, 4 };
+        if (k >= 1 && k <= 8)
+            a[3] ^= (uint8_t)(1 << keybit[k]);
+        break;
+    }
+    }
+}
+
+static void byt_key(int k)
+{
+    /* keys 1-8 -> _mtrig+3 bit (§5.5 net map) */
+    static const int keybit[9] = { -1, 6, 1, 2, 3, 4, 5, 0, 7 };
+    if (k >= 1 && k <= 8)
+        (cur_fx() + FX_MTRIG)[3] ^= (uint8_t)(1 << keybit[k]);
+}
+
+static void kpad_input(void)
+{
+    int k = kpad_key();
+    if (k >= 0) {
+        if (ed.kpad_is_sym)
+            sym_key(k);
+        else
+            byt_key(k);
+        ed.seldb = 1;
+    }
+    /* fire: A/C step params, B back to menu (pn_butte) */
+    if (ed.shot & PAD_B) {
+        ed.action = ed.ledit;
+        ed.editing = ED_OFF;
+        ed.symed = SY_NONE;
+        ed.seldb = 1;
+    } else if (ed.shot & PAD_A) {
+        param_step(-1);
+        ed.editing = ED_OFF;
+        ed.seldb = 1;
+    } else if (ed.shot & PAD_C) {
+        param_step(1);
+        ed.editing = ED_OFF;
+        ed.seldb = 1;
+    }
+}
+
+/* redraw the highlighted bit digits (called from the display side) */
+static void dv_kpad(void)
+{
+    uint8_t st = ed.kpad_is_sym
+                 ? (cur_fx() + FX_ASYM_FLA)[3]
+                 : (cur_fx() + FX_MTRIG)[3];
+    /* key N lights when its bit is set (inverse of the key->bit map) */
+    static const int sym_bitfor[9] = { -1, 7, 1, 5, 6, 2, 3, 0, 4 };
+    static const int byt_bitfor[9] = { -1, 6, 1, 2, 3, 4, 5, 0, 7 };
+    const int *m = ed.kpad_is_sym ? sym_bitfor : byt_bitfor;
+    for (int key = 1; key <= 8; key++)
+        vlm_board_char(3 + (key - 1) * 2, 10,
+                       (uint8_t)('0' + key), (st >> m[key]) & 1);
+    if (ed.kpad_is_sym) {
+        int rot = (vlm_be32(cur_fx() + FX_ASYM_FLA) >> 16) & 1;
+        vlm_board_char(20, 10, '9', rot);
+    }
+}
+
+static void init_sym(void)
+{
+    ed.kpad_is_sym = 1;
+    cprint("Editing: Symmetry Planes and Types/");
+    ed_print("Press number keys to turn planes off or on/");
+    ed_print("9 = rotational, * = clear, # = invert");
+    ed_print("~g1:20:<A> Prev   <B> Menu   <C> Next");
+    ed.editing = ED_KPAD;
+    ed.symed = SY_NONE;
+}
+
+static void init_byt(void)
+{
+    ed.kpad_is_sym = 0;
+    cprint("Byte bitmap.  Press buttons to/change a bit.");
+    ed_print("~g1:20:<A> Prev   <B> Menu   <C> Next");
+    ed.editing = ED_KPAD;
+    ed.symed = SY_NONE;
 }
 
 /* ---- entry / frame ---------------------------------------------------- */
@@ -895,6 +1265,15 @@ int vlm_editor_frame(VlmEngine *e, uint32_t buttons, uint16_t *screen)
         case ED_SPECED3:
             speced3_input();
             break;
+        case ED_AWF:
+            awf_input();
+            break;
+        case ED_SPDINC:
+            spdinc_input();
+            break;
+        case ED_KPAD:
+            kpad_input();
+            break;
         default:
             break;
         }
@@ -927,9 +1306,17 @@ int vlm_editor_frame(VlmEngine *e, uint32_t buttons, uint16_t *screen)
     case SY_SHSPEC:
         dv_shspec();
         break;
+    case SY_WSSHOW:
+        dv_wsshow();
+        break;
+    case SY_AWF:
+        dv_awf();
+        break;
     default:
         break;
     }
+    if (ed.editing == ED_KPAD)
+        dv_kpad();
 
     return ed.editing != ED_OFF || ed.action != NULL;
 }
