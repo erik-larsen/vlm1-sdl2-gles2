@@ -143,6 +143,71 @@ static void do_adsr(VlmEngine *e, int block_off, int pressed,
     e->envvals[envval_idx] = (uint16_t)level;
 }
 
+/* ---- symadj: inertial pad controllers -> px/py ----------------------- */
+
+/* pinertco/inertcon (vlm.s:6729-6834) on a 28-byte controller block
+ * {value, vel, accel, friction, max, min, velcap}: dir bit0 =
+ * decrease, bit1 = increase, none = friction decay. */
+static void pinertco(uint8_t *b, int dir)
+{
+    int32_t val = (int32_t)vlm_be32(b);
+    int32_t vel = (int32_t)vlm_be32(b + 4);
+    int32_t accel = (int32_t)vlm_be32(b + 8);
+    int32_t fric = (int32_t)vlm_be32(b + 12);
+    int32_t maxv = (int32_t)vlm_be32(b + 16);
+    int32_t minv = (int32_t)vlm_be32(b + 20);
+    int32_t cap = (int32_t)vlm_be32(b + 24);
+    int lim = 1;
+
+    if ((dir & 3) == 0) {
+        /* friction (vlm.s:6815-6834) */
+        if (maxv == minv)
+            lim = 0;
+        int32_t mag = vel < 0 ? -vel : vel;
+        if (mag < fric) {
+            vlm_wbe32(b + 4, 0);
+            return;
+        }
+        vel -= vel < 0 ? -fric : fric;
+    } else if (dir & 1) {
+        /* move toward min (vlm.s:6747-6768) */
+        if (maxv == minv) {
+            lim = 0;
+        } else if (val < minv) {
+            vlm_wbe32(b, (uint32_t)minv);
+            vlm_wbe32(b + 4, 0);
+            return;
+        }
+        if (vel >= -cap)
+            vel -= accel;
+    } else {
+        /* move toward max (vlm.s:6784-6803) */
+        if (maxv == minv) {
+            lim = 0;
+        } else if (val >= maxv) {
+            vlm_wbe32(b, (uint32_t)maxv);
+            vlm_wbe32(b + 4, 0);
+            return;
+        }
+        if (vel < cap)
+            vel += accel;
+    }
+
+    /* inmove (vlm.s:6770-6782) */
+    vlm_wbe32(b + 4, (uint32_t)vel);
+    val += vel;
+    vlm_wbe32(b, (uint32_t)val);
+    if (lim) {
+        if (val < minv) {
+            vlm_wbe32(b, (uint32_t)minv);
+            vlm_wbe32(b + 4, 0);
+        } else if (val >= maxv) {
+            vlm_wbe32(b, (uint32_t)maxv);
+            vlm_wbe32(b + 4, 0);
+        }
+    }
+}
+
 /* ---- psi.gas: spectrum peak-hold, band envelopes, triggers ---------- */
 
 void vlm_engine_spectrum(VlmEngine *e, const uint32_t *fft67)
@@ -336,10 +401,20 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
 void vlm_engine_frame(VlmEngine *e, uint16_t *screen,
                       const uint16_t *cscreen)
 {
-    /* 68k VI side: ADSR envelopes -> envvals[5..7]. */
+    /* 68k VI side (symadj, vlm.s:859): ADSR envelopes then the
+     * inertial pad controllers feeding the px/py user waveforms. */
     do_adsr(e, PC_ADSRC, (e->buttons & PAD_C) != 0, 5);
     do_adsr(e, PC_ADSRB, (e->buttons & PAD_B) != 0, 6);
     do_adsr(e, PC_ADSRA, (e->buttons & PAD_A) != 0, 7);
+
+    pinertco(e->pixcon + 0,
+             ((e->buttons & PAD_LEFT) ? 1 : 0)
+             | ((e->buttons & PAD_RIGHT) ? 2 : 0));
+    pinertco(e->pixcon + 28,
+             ((e->buttons & PAD_UP) ? 1 : 0)
+             | ((e->buttons & PAD_DOWN) ? 2 : 0));
+    e->px = (uint16_t)(vlm_be32(e->pixcon + 0) >> 8);
+    e->py = (uint16_t)(vlm_be32(e->pixcon + 28) >> 8);
 
     /* GPU omega, per fxobj: dbeast (delay-line snapshot + echo
      * replays of archived parameter blocks, dbeast.gas +
