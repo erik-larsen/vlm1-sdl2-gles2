@@ -80,6 +80,9 @@ void vlm_engine_select(VlmEngine *e, int bank, int effect)
         e->delay[ch].n = 15;
     }
     memset(e->delaylin, 0, sizeof e->delaylin);
+
+    /* skidoo also switches the Jaguar-logo object off (vlm.s:4638) */
+    e->logo_active = 0;
 }
 
 /* ---- ADSR (doadsr, vlm.s:906-1023) ---------------------------------- */
@@ -369,6 +372,10 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
         .skale = e->skale,
         .absdelta = e->absdelta,
         .pools = e->pools,
+        .logo_active = e->logo_active,
+        .logo_x = e->logo_x,
+        .logo_y = e->logo_y,
+        .clut_sha = e->clut_sha,
     };
     switch (gpu >> 16) {
     case 0:
@@ -396,6 +403,10 @@ static void run_module(VlmEngine *e, uint8_t *fx, uint16_t *screen,
         break;
     }
     e->skale = c.skale;
+    e->logo_active = c.logo_active;
+    e->logo_x = c.logo_x;
+    e->logo_y = c.logo_y;
+    e->clut_sha = c.clut_sha;
 }
 
 void vlm_engine_frame(VlmEngine *e, uint16_t *screen,

@@ -44,6 +44,12 @@ struct VlmFxCtx {
     const uint32_t *absdelta; /* 64-band peak-hold spectrum (lol[7]) */
     VlmParticlePool *pools;   /* pobjs[2] (lol[3]) */
 
+    /* delta mode 3 outputs: Jaguar-logo OP object position/colour
+     * (beastie 3 + clut_sha; delta.gas:377-434) */
+    int logo_active;
+    int32_t logo_x, logo_y;   /* raw dstoffx / dy<<1 longs */
+    uint16_t clut_sha;
+
     /* Module-register state used by the shared plot path */
     uint32_t cc_pix;      /* r5: CC << 8 */
     uint32_t intensity;   /* r27: 16-bit intensity */

@@ -16,6 +16,7 @@
 #include "engine.h"
 #include "fx.h"
 #include "audiofft.h"
+#include "logos_data.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -96,7 +97,10 @@ static void draw_scope(void)
 }
 
 /* Extract the OP-visible window into the 384x240 view (nearest
- * neighbour, as the OP's integer HSCALE/VSCALE replication did). */
+ * neighbour, as the OP's integer HSCALE/VSCALE replication did),
+ * then composite the Jaguar-logo object (beastie 3: jaglogo 1bpp,
+ * 40-byte rows, foreground colour from clut_sha, transparent 0s)
+ * when delta mode 3 has it active. */
 static void build_view(const uint16_t *src)
 {
     unsigned s = engine.skale <= 2 ? engine.skale : 0;
@@ -107,7 +111,30 @@ static void build_view(const uint16_t *src)
         for (int x = 0; x < VIEW_W; x++)
             drow[x] = srow[x >> s];
     }
+
+    if (engine.logo_active) {
+        /* display x -> view x is +8 (the main screen object sits at
+         * X=-8); object Y is in half-lines */
+        int32_t lx = (engine.logo_x >> 16) + 8;
+        int32_t ly = engine.logo_y >> 17;
+        int32_t h = (int32_t)((vlm_be16(vlm_jaglogo + 2) & 0xFFFF)) + 1;
+        for (int32_t row = 0; row < h; row++) {
+            int32_t vy = ly + row;
+            if (vy < 0 || vy >= VIEW_H)
+                continue;
+            const uint8_t *bits = vlm_jaglogo + 4 + row * 40;
+            for (int32_t x = 0; x < 320; x++) {
+                if (!(bits[x >> 3] & (0x80 >> (x & 7))))
+                    continue;
+                int32_t vx = lx + x;
+                if (vx >= 0 && vx < VIEW_W)
+                    view[vy * VIEW_W + vx] = engine.clut_sha;
+            }
+        }
+    }
 }
+
+static bool splash = true;
 
 static bool tick(void)
 {
@@ -122,6 +149,20 @@ static bool tick(void)
     uint32_t buttons = plat_buttons();
     engine.buttons = buttons;
 
+    /* Boot splash: the Jaguar-logo wait screen (bank 10 effect 5,
+     * LaunchVLM vlm.s:228-235) until a digit is pressed or ~10s. */
+    if (splash) {
+        int pressed = 0;
+        for (int d = 1; d <= 9; d++)
+            if (buttons & PAD_DIGIT(d))
+                pressed = d;
+        if (pressed || frame > 600) {
+            splash = false;
+            vlm_engine_select(&engine, 0, pressed ? pressed : 1);
+            held_digits = buttons & (0x3FF * PAD_0);
+        }
+    }
+
     if ((buttons & PAD_AUDIO) && !held_a) {
         use_audio = !use_audio;
         if (use_audio && !audio_running)
@@ -130,16 +171,18 @@ static bool tick(void)
     held_a = (buttons & PAD_AUDIO) != 0;
 
     /* effect/bank select: plain digit = effect, with * held = bank */
-    for (int d = 1; d <= 9; d++) {
-        uint32_t bit = PAD_DIGIT(d);
-        if ((buttons & bit) && !(held_digits & bit)) {
-            if (buttons & PAD_STAR)
-                vlm_engine_select(&engine, d - 1, engine.effect);
-            else
-                vlm_engine_select(&engine, engine.bank, d);
+    if (!splash) {
+        for (int d = 1; d <= 9; d++) {
+            uint32_t bit = PAD_DIGIT(d);
+            if ((buttons & bit) && !(held_digits & bit)) {
+                if (buttons & PAD_STAR)
+                    vlm_engine_select(&engine, d - 1, engine.effect);
+                else
+                    vlm_engine_select(&engine, engine.bank, d);
+            }
         }
+        held_digits = buttons & (0x3FF * PAD_0);
     }
-    held_digits = buttons & (0x3FF * PAD_0);
 
     if ((buttons & PAD_SCOPE) && !held_v)
         show_scope = !show_scope;
@@ -185,7 +228,8 @@ int main(int argc, char **argv)
         return 1;
 
     vlm_engine_init(&engine);
-    vlm_engine_select(&engine, 0, 1);
+    /* boot into the splash bank's Jaguar-logo wait screen */
+    vlm_engine_select(&engine, 9, 5);
 
     /* Try live audio up front (browser shows its mic permission
      * prompt here); the synthetic test spectrum remains the fallback

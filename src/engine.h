@@ -52,6 +52,12 @@ typedef struct {
     /* OP display scale word, written by beta from `thang` */
     uint16_t skale;
 
+    /* Jaguar-logo OP overlay (beastie 3), driven by delta mode 3;
+     * deactivated on every effect select (skidoo, vlm.s:4638) */
+    int logo_active;
+    int32_t logo_x, logo_y;
+    uint16_t clut_sha;
+
     /* Particle pools (pobjs[2]) for theta/epsilon */
     VlmParticlePool pools[2];
 
