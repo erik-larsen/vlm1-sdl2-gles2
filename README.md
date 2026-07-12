@@ -66,10 +66,16 @@ make           # both
 
 Run: `make run-native`, or serve `web/` and open `vlm.html`.
 
-Controls (matching the Jaguar pad mapping): keypad/number keys select
-the effect, `8`(*) + digit selects a bank, `Z`/`X`/`C` are the A/B/C
-buttons (trigger the ADSR envelopes), `O` option, `P` pause, arrows =
-d-pad, Esc quits.
+Controls (matching the Jaguar pad mapping): number keys select the
+effect, `M`(\*) + digit selects a bank, `Z`/`X`/`C` are the A/B/C
+buttons (trigger the ADSR envelopes), arrows = d-pad (steer the px/py
+user waveforms), Esc quits.
+
+The hidden editor: hold `7`+`M`+`0`+`3` (the original cheat combo) or
+press `P` to open Spectrum and Triggers; wrap the menu downward 8
+times for the hidden Edit Mode root — or press `O` to jump straight
+there. Inside: arrows navigate/adjust, `Z` and `C` select or step
+between parameters, `X` backs out to the menu.
 
 ## Layout
 
