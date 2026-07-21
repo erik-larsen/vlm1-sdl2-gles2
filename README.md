@@ -15,8 +15,7 @@ fixed-point math.
 
 ## Status
 
-- [x] Cross-platform build (Mac native + Emscripten), makefiles adapted
-      from [sgi-demos](https://github.com/mipmap/sgi-demos)
+- [x] Cross-platform build (Mac native + Emscripten)
 - [x] SDL2/GLES2 platform layer: CRY16 framebuffer presented via a
       textured quad, CRY→RGB using the Jaguar TOM hardware chroma tables
 - [x] Bank data pipeline: all 10 preset banks extracted from `banks.s`
