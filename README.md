@@ -1,5 +1,7 @@
 # VLM-1 — SDL2/GLES2 port
 
+![vlm-title-screen](assets/screenshot.png)
+
 A from-source C port of Jeff Minter's **Virtual Light Machine** (the
 light synthesizer built into the Atari Jaguar CD, 1995), targeting one
 shared code path for native (macOS via ANGLE, Linux, Windows) and the
